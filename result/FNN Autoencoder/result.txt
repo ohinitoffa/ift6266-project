@@ -1,0 +1,2 @@
+Fully connected on cpu
+Training epoch 8, cost 0.04071 549,26min
