@@ -9,4 +9,5 @@ TRAINED_MODEL_FILE = 'trainedmodel.pkl'    # File to store the learned model
 OUTPUT_FOLDER = 'result'
 TRAINING_EPOCHS = 15
 BATCH_SIZE = 128
-NUM_HIDDEN = 32
+NUM_HIDDEN = 3*8*8
+INPUT_SHAPE = (None,3,64,64)

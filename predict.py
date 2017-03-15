@@ -8,21 +8,22 @@ import pickle as pkl
 import lasagne
 import theano
 import numpy as np
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from config import TRAINED_MODEL_FILE
 import PIL.Image as Image
 
-def predict(test_set_x, test_set_y, test_size, classifier=None):
-    """ Load a trained model and use it to predict result images of test set. """
-
+def predict(test_set_x, test_set_y, test_size):
     print('loading the trained model')
-    if classifier is None:
-        classifier = pkl.load(open(TRAINED_MODEL_FILE))
-
+    #with open(TRAINED_MODEL_FILE, 'rb') as f:
+        #u = pkl._Unpickler(f)
+        #u.encoding = 'latin1'
+        #classifier = u.load()    
+    #classifier = pkl.load(open(TRAINED_MODEL_FILE, 'rb'), encoding='latin1')
+    classifier = pkl.load(open(TRAINED_MODEL_FILE))
     print('compiling the predictor function')
     predict_model = theano.function(
         inputs=[classifier.input],
-        outputs=lasagne.layers.get_output(classifier.network))
+        outputs=lasagne.layers.get_output(classifier.network, deterministic=True))
     #test_set_x = test_set_x.get_value()
     predicted_values = predict_model(test_set_x[:test_size])
     

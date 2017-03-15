@@ -13,9 +13,9 @@ import lasagne
 import theano
 import theano.tensor as T
 import pickle as pkl
-from config import TRAINING_EPOCHS, BATCH_SIZE, OUTPUT_FOLDER, NUM_HIDDEN, TRAINED_MODEL_FILE
-from model_autoencoder import autoencoder
-def train_coco(trainset, valset, training_epochs= TRAINING_EPOCHS, batch_size=BATCH_SIZE, 
+from config import TRAINING_EPOCHS, BATCH_SIZE, OUTPUT_FOLDER, NUM_HIDDEN, TRAINED_MODEL_FILE, INPUT_SHAPE
+from model_autoencoder import autoencoder, convautoencoder
+def train_coco(trainset, valset, network_type=0, training_epochs= TRAINING_EPOCHS, batch_size=BATCH_SIZE, 
           output_folder=OUTPUT_FOLDER):
     n_train_batches = len(trainset.imgs) // batch_size
     n_valid_batches = len(valset.imgs) // batch_size
@@ -25,19 +25,28 @@ def train_coco(trainset, valset, training_epochs= TRAINING_EPOCHS, batch_size=BA
     improvement_threshold = 0.995 
     validation_frequency = min(n_train_batches, patience // 2) 
     best_validation_cost = numpy.inf 
+    #create output folder
+    if not os.path.isdir(output_folder):
+        os.makedirs(output_folder)    
 
     #variables type                    
-    x = T.tensor4('x')
-    y = T.tensor4('y')
     inputvar = T.tensor4('inputvar')
     targetvar = T.tensor4('targetvar')    
     
-    model = autoencoder(
-        input=x,
-        target=y,
-        input_shape=(None,3,64,64), 
-        n_hidden=NUM_HIDDEN
-    )    
+    if(network_type == 0):
+        model = autoencoder(
+            input=inputvar,
+            target=targetvar,
+            input_shape=INPUT_SHAPE, 
+            n_hidden=NUM_HIDDEN
+        ) 
+    elif(network_type == 1):
+        model = convautoencoder(
+            input=inputvar,
+            target=targetvar,
+            input_shape=INPUT_SHAPE, 
+            n_hidden=NUM_HIDDEN
+        )         
 
     print("Building the model ...")
     cost, updates = model.get_cost_updates()
@@ -45,14 +54,16 @@ def train_coco(trainset, valset, training_epochs= TRAINING_EPOCHS, batch_size=BA
         [inputvar,targetvar],
         cost,
         updates=updates,
-        givens={ x: inputvar, y : targetvar},        
-        on_unused_input='ignore'
+       # givens={ x: inputvar, y : targetvar},        
+        on_unused_input='ignore',
+        mode='FAST_RUN'
     )
     
     validate_model = theano.function(
         inputs=[model.input],
-        outputs=lasagne.layers.get_output(model.network), 
-        on_unused_input='ignore'
+        outputs=lasagne.layers.get_output(model.network, deterministic=True), 
+        on_unused_input='ignore',
+        mode='FAST_RUN'
     )     
 
     start_time = timeit.default_timer()
@@ -69,17 +80,19 @@ def train_coco(trainset, valset, training_epochs= TRAINING_EPOCHS, batch_size=BA
         # go through training set
         train_cost = []
         for batch_index in range(n_train_batches):
-            input, target, caption = trainset.load_items(batch_index, batch_size)
+            print("batch_index %d"%batch_index)
+            input_shared, target_shared, caption = trainset.load_items(batch_index, batch_size)
+            input, target = input_shared.get_value(borrow=True), target_shared.get_value(borrow=True)
             # changed shape from (batch_size,64,64,3)  to (batch_size,3,64,64)
-            train_cost.append(train_model(input.transpose((0, 3, 1, 2)), target.transpose((0, 3, 1, 2))))
+            train_cost.append(train_model(input, target))
+            print("trained %d"%batch_index)
             iter = (epoch - 1) * n_train_batches + batch_index
             if (iter + 1) % validation_frequency == 0:
                 # compute loss on validation set
                 validation_cost = []
                 for valbatch_index in range(n_valid_batches):
-                    valinput, valtarget, valcaption = valset.load_items(valbatch_index, batch_size)
-                    valinput = valinput.transpose((0, 3, 1, 2))
-                    valtarget = valtarget.transpose((0, 3, 1, 2))
+                    valinput_shared, valtarget_shared, valcaption = valset.load_items(valbatch_index, batch_size)
+                    valinput, valtarget = valinput_shared.get_value(borrow=True), valtarget_shared.get_value(borrow=True)
                     network_output = validate_model(valinput)
                     val_loss = ((network_output.flatten() - valtarget.flatten())**2).mean()
                     validation_cost.append(val_loss) 
@@ -106,6 +119,6 @@ def train_coco(trainset, valset, training_epochs= TRAINING_EPOCHS, batch_size=BA
     end_time = timeit.default_timer()
     training_time = (end_time - start_time) 
 
-    print('The training ran for %.2fm' % ((training_time) / 60.))
+    print('The training ran for %.2fm' % ((training_time) / 60.))    
     
    
